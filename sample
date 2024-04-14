@@ -1,0 +1,46 @@
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.synapse import SynapseManagementClient
+from azure.mgmt.synapse.models import Workspace, WorkspacePatchInfo
+from azure.synapse.artifacts import PipelineResource, WorkspaceClient
+from azure.synapse.artifacts.models import CopyActivity, LinkedServiceReference, DatasetReference, AzureBlobStorageLinkedService, AzureBlobLocation, ParquetFormat
+
+# Connect to Azure Synapse Analytics workspace
+credential = DefaultAzureCredential()
+subscription_id = 'your-subscription-id'
+resource_group = 'your-resource-group'
+workspace_name = 'your-workspace-name'
+
+synapse_client = SynapseManagementClient(credential, subscription_id)
+workspace_client = WorkspaceClient(credential, subscription_id, resource_group, workspace_name)
+
+# Modernize data warehouse - create Synapse Analytics workspace
+new_workspace = Workspace(location='your-location', tags={'key': 'value'})
+synapse_client.workspaces.create_or_update(resource_group, workspace_name, new_workspace)
+
+# Set up Azure Data Factory for ETL
+linked_service_name = 'AzureBlobStorageLinkedService'
+blob_storage_linked_service = AzureBlobStorageLinkedService(connection_string='your-connection-string')
+workspace_client.linked_services.create_or_update(resource_group, workspace_name, linked_service_name, blob_storage_linked_service)
+
+# Define dataset and linked service references
+source_linked_service = LinkedServiceReference(reference_name=linked_service_name)
+source_dataset = DatasetReference(reference_name='your-source-dataset')
+sink_linked_service = LinkedServiceReference(reference_name=linked_service_name)
+sink_dataset = DatasetReference(reference_name='your-sink-dataset')
+
+# Define copy activity to move data from source to sink
+copy_activity = CopyActivity(
+    name='CopyData',
+    inputs=[source_dataset],
+    outputs=[sink_dataset],
+    source=source_linked_service,
+    sink=sink_linked_service,
+    enable_staging=True,
+    translator=ParquetFormat()
+)
+
+# Create pipeline
+pipeline = PipelineResource(activities=[copy_activity])
+pipeline_name = 'ETLPipeline'
+
+workspace_client.pipelines.create_or_update(resource_group, workspace_name, pipeline_name, pipeline)
